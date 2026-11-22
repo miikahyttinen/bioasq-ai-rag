@@ -77,6 +77,7 @@ cd backend
 uv run python -m scripts.01_download   # data/raw/*.parquet (~26 MB, ~10 s)
 uv run python -m scripts.02_prepare    # data/processed/*.parquet (~2 s)
 uv run python -m scripts.03_embed      # storage/chroma + embeddings.npy (~46 min, resumable)
+uv run python -m scripts.04_bm25       # storage/bm25 keyword index (~3 s)
 ```
 
 `03_embed` is resumable: if it stops, rerun it and it continues from the last stored batch. Measured run: 36,076 chunks in 45.7 min (13.1 chunks/s), 515 MB Chroma collection, 148 MB `embeddings.npy`.
