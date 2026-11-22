@@ -78,6 +78,7 @@ uv run python -m scripts.01_download   # data/raw/*.parquet (~26 MB, ~10 s)
 uv run python -m scripts.02_prepare    # data/processed/*.parquet (~2 s)
 uv run python -m scripts.03_embed      # storage/chroma + embeddings.npy (~46 min, resumable)
 uv run python -m scripts.04_bm25       # storage/bm25 keyword index (~3 s)
+uv run python -m scripts.06_evaluate   # storage/eval (retrieval ~4 min + answers ~35 min)
 ```
 
 `03_embed` is resumable: if it stops, rerun it and it continues from the last stored batch. Measured run: 36,076 chunks in 45.7 min (13.1 chunks/s), 515 MB Chroma collection, 148 MB `embeddings.npy`.
@@ -100,6 +101,39 @@ Notes on the data, compared with the plan:
 - The plan expects 4,387 usable questions. The extra one has a single relevant passage whose text is just `"1."`, so it is excluded.
 - The plan's median passage length (~1,160 chars) includes the empty `"nan"` rows. Among real abstracts the median is ~1,450 chars, and 12,925 exceed the plan's 1,500-char "keep whole" limit. To keep the plan's intent ("most passages fit in one chunk") the limit is `MAX_WHOLE_PASSAGE_CHARS=2000`, so only the ~3,100 longest abstracts are split (36k chunks instead of 52k). Set it back to 1,500 in `.env` to compare.
 - Long passages are split on sentence boundaries into balanced chunks of at most 1,200 chars, each starting with ~200 chars (whole sentences) from the previous chunk.
+
+## Evaluation
+
+`06_evaluate` has two parts (`--part retrieval|answers|all`):
+
+1. **Retrieval** on all 4,386 usable questions for dense, BM25 and hybrid search. Metrics are at the PubMed-ID level: recall@1/5/10/20, MRR (first gold article within the top 20) and hit-rate@10. No LLM needed.
+2. **Answers** on a fixed random sample (`--sample`, default 100, seed 42) using the best retrieval strategy and `k=8` sources. Each question is answered with RAG and without retrieval, and each answer is scored 1–5 by an LLM judge: correctness against the expert answer, and (RAG only) groundedness in the sources. The judge must return JSON matching a pydantic schema and is retried once if invalid. Records are appended to `answers.jsonl` as they finish, so an interrupted run resumes.
+
+Retrieval results (4,386 questions):
+
+| Strategy | Recall@1 | Recall@5 | Recall@10 | Recall@20 | MRR | Hit@10 |
+|---|---|---|---|---|---|---|
+| Dense | 0.242 | 0.524 | 0.654 | 0.753 | 0.806 | 0.908 |
+| BM25 | 0.254 | 0.562 | 0.709 | 0.813 | 0.829 | 0.938 |
+| **Hybrid** | 0.252 | **0.576** | **0.724** | **0.835** | **0.840** | **0.943** |
+
+Answer results (100 questions, hybrid retrieval, k=8, `gemma4:26b-a4b-it-qat`, ~50 min):
+
+| | Correctness (1–5) | Correct (score ≥ 4) | Groundedness (1–5) | Seconds per answer |
+|---|---|---|---|---|
+| **RAG** | **4.68** | **89%** | 5.00 | 11.2 |
+| No RAG | 3.92 | 69% | — | 6.6 |
+
+- RAG rescued 26 questions the model got wrong on its own; the model alone did better on 6.
+- RAG correctness was 4.74 when a gold article was among the sources (91 questions) and 4.11 when none was (9).
+- 99 of 100 RAG answers cite sources (2.7 distinct sources on average). In 4 the model said the sources did not contain the answer instead of guessing.
+- The judge returned valid JSON on the first try for all 200 judgments.
+
+Caveats:
+
+- **Groundedness is at its ceiling:** the judge gave 5 to every RAG answer, so this score does not discriminate. A stricter, claim-by-claim check or a different judge model would be needed to measure it.
+- **Self-grading bias:** the judge is the same local model that wrote the answers, which tends to inflate scores. Use the scores to compare RAG with no-RAG, not as absolute quality.
+- **Incomplete gold sets:** BioASQ gold lists are not exhaustive, so a "miss" can still be a relevant paper. Recall is also capped for questions with more gold articles than `k`.
 
 ## Project layout
 
