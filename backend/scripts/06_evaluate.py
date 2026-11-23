@@ -20,13 +20,13 @@ from pathlib import Path
 from statistics import mean
 
 import pandas as pd
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from tqdm import tqdm
 
 from app.config import settings
 from app.core import prompts
 from app.core.embed import unload_embed_model
-from app.core.llm import ChatResult, chat, unload
+from app.core.llm import ChatResult, chat, chat_json, unload
 from app.core.metrics import mean_metrics, question_metrics
 from app.core.retrieve import STRATEGIES, Hit, search_many
 from app.models import CorrectnessVerdict, RagVerdict
@@ -99,15 +99,10 @@ def print_retrieval_table(result: dict) -> None:
 
 def judge(messages: list[dict], schema: type[BaseModel], chat_fn: ChatFn) -> dict:
     """Ask for JSON matching `schema`; retry once if it is invalid."""
-    error = None
-    for attempt in (1, 2):
-        result = chat_fn(messages, format=schema.model_json_schema(), temperature=0.0)
-        try:
-            verdict = schema.model_validate_json(result.text)
-            return {"ok": True, "attempts": attempt, **verdict.model_dump()}
-        except ValidationError as exc:
-            error = str(exc).splitlines()[0]
-    return {"ok": False, "attempts": 2, "error": error}
+    verdict, attempts, error = chat_json(messages, schema, chat_fn)
+    if verdict is None:
+        return {"ok": False, "attempts": attempts, "error": error}
+    return {"ok": True, "attempts": attempts, **verdict.model_dump()}
 
 
 def generate(messages: list[dict], chat_fn: ChatFn) -> dict:

@@ -138,3 +138,34 @@ Score the candidate answer.
 
 Return JSON with "reason" (one or two sentences) and "correctness"."""
     return [{"role": "system", "content": JUDGE_SYSTEM}, {"role": "user", "content": user}]
+
+
+# --- topic labels ----------------------------------------------------------------
+
+TOPIC_SYSTEM = """\
+You name clusters of PubMed abstracts for a topic map of biomedical literature. \
+Respond only with the requested JSON."""
+
+
+def topic_label_messages(
+    excerpts: Sequence[str], size: int, used_labels: Sequence[str] = ()
+) -> list[dict]:
+    numbered = "\n\n".join(f"[{i}] {text}" for i, text in enumerate(excerpts, start=1))
+    avoid = (
+        "\n\nLabels already used for other clusters (choose a different, more specific "
+        "one if this cluster overlaps them): " + "; ".join(used_labels)
+        if used_labels
+        else ""
+    )
+    user = f"""\
+These are the {len(excerpts)} most typical abstracts from a cluster of {size} abstracts:
+
+{numbered}
+
+Name the shared topic of this cluster.
+- "label": 2 to 5 words, specific and in title case (e.g. "Breast Cancer Genetics", \
+"Malaria Drug Resistance"). No generic words like "Studies" or "Research".
+- "description": one sentence on what the abstracts in this cluster are about.{avoid}
+
+Return JSON with "label" and "description"."""
+    return [{"role": "system", "content": TOPIC_SYSTEM}, {"role": "user", "content": user}]

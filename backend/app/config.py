@@ -46,6 +46,16 @@ class Settings(BaseSettings):
     eval_sample_size: int = 100
     eval_seed: int = 42
 
+    # Topic map
+    topics_seed: int = 42
+    topics_n_neighbors: int = 15
+    topics_cluster_dims: int = 10
+    # Tuned on this corpus: 55 clusters, ~36% noise (noise stays 32-36% for nearby values).
+    topics_min_cluster_size: int = 150
+    topics_min_samples: int = 10
+    topics_representatives: int = 8
+    topics_representative_chars: int = 800
+
     @property
     def raw_dir(self) -> Path:
         return self.data_dir / "raw"

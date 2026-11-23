@@ -1,8 +1,11 @@
 """Ollama chat wrapper."""
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+
+from pydantic import BaseModel, ValidationError
 
 from app.config import settings
 from app.core.embed import get_client
@@ -40,6 +43,26 @@ def chat(
         output_tokens=response.eval_count or 0,
         seconds=time.perf_counter() - start,
     )
+
+
+def chat_json[M: BaseModel](
+    messages: list[dict[str, str]],
+    schema: type[M],
+    chat_fn: Callable[..., ChatResult] = chat,
+    attempts: int = 2,
+) -> tuple[M | None, int, str | None]:
+    """Request JSON constrained to `schema`; validate, retrying on invalid output.
+
+    Returns (parsed or None, attempts used, last validation error).
+    """
+    error = None
+    for attempt in range(1, attempts + 1):
+        result = chat_fn(messages, format=schema.model_json_schema(), temperature=0.0)
+        try:
+            return schema.model_validate_json(result.text), attempt, None
+        except ValidationError as exc:
+            error = str(exc).splitlines()[0]
+    return None, attempts, error
 
 
 def unload(model: str | None = None) -> None:

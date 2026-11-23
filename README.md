@@ -78,7 +78,8 @@ uv run python -m scripts.01_download   # data/raw/*.parquet (~26 MB, ~10 s)
 uv run python -m scripts.02_prepare    # data/processed/*.parquet (~2 s)
 uv run python -m scripts.03_embed      # storage/chroma + embeddings.npy (~46 min, resumable)
 uv run python -m scripts.04_bm25       # storage/bm25 keyword index (~3 s)
-uv run python -m scripts.06_evaluate   # storage/eval (retrieval ~4 min + answers ~35 min)
+uv run python -m scripts.05_topics     # storage/topics map + labels (~6 min)
+uv run python -m scripts.06_evaluate   # storage/eval (retrieval ~4 min + answers ~35-50 min)
 ```
 
 `03_embed` is resumable: if it stops, rerun it and it continues from the last stored batch. Measured run: 36,076 chunks in 45.7 min (13.1 chunks/s), 515 MB Chroma collection, 148 MB `embeddings.npy`.
@@ -134,6 +135,24 @@ Caveats:
 - **Groundedness is at its ceiling:** the judge gave 5 to every RAG answer, so this score does not discriminate. A stricter, claim-by-claim check or a different judge model would be needed to measure it.
 - **Self-grading bias:** the judge is the same local model that wrote the answers, which tends to inflate scores. Use the scores to compare RAG with no-RAG, not as absolute quality.
 - **Incomplete gold sets:** BioASQ gold lists are not exhaustive, so a "miss" can still be a relevant paper. Recall is also capped for questions with more gold articles than `k`.
+
+## Topic map
+
+`05_topics` places every abstract on a 2D map and groups them into topics:
+
+1. One vector per article (the normalized mean of its chunk vectors).
+2. UMAP to 2D for the map (`n_neighbors=15`, `min_dist=0.1`, cosine, fixed seed).
+3. A second UMAP to 10D, clustered with HDBSCAN (`min_cluster_size=150`, `min_samples=10`). Clustering in 10D keeps groups apart that a 2D projection would merge.
+4. The LLM names each cluster from its 8 most typical abstracts (closest to the cluster's mean direction) with a 2–5 word label and a one-sentence description, validated against a JSON schema.
+
+Projections are cached in `storage/topics/projection.npz`; use `--fresh` to recompute them.
+
+Result: **56 topics** for 27,972 abstracts, e.g. "Genetic Syndromes and Dysmorphology" (1,118), "Emerging Viral Pathogens and Vaccines" (857), "Alzheimer's Amyloid-Beta Therapeutics" (367), "CGRP-Targeted Migraine Therapies" (180).
+
+Notes:
+
+- **~39% of abstracts are unclustered** (HDBSCAN noise). The corpus spans all of biomedicine with many small topics, and noise stays at 32–39% for any setting that gives 25–85 clusters. Each unclustered point also stores its `nearest_cluster`.
+- **Labels describe the cluster's core.** The LLM sees only the most central abstracts, so a mixed cluster can get a narrow label (e.g. "HER2-Targeted Prostate Cancer Therapies" also contains HER2 breast cancer papers).
 
 ## Project layout
 
