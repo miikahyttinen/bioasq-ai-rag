@@ -2,7 +2,7 @@
 
 A fully local app for studying the `rag-mini-bioasq` biomedical dataset with an LLM: chat with cited sources, semantic search, a topic map of the corpus, and a retrieval evaluation dashboard. Everything runs on your machine through Ollama; no cloud APIs.
 
-The full implementation plan is in [`bioasq-rag-plan.md`](bioasq-rag-plan.md).
+**See the project with screenshots and results: [`docs/PROJECT.md`](docs/PROJECT.md).** The full implementation plan is in [`bioasq-rag-plan.md`](bioasq-rag-plan.md).
 
 > This is a research and study tool. It is not medical advice.
 
