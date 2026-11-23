@@ -154,6 +154,29 @@ Notes:
 - **~39% of abstracts are unclustered** (HDBSCAN noise). The corpus spans all of biomedicine with many small topics, and noise stays at 32–39% for any setting that gives 25–85 clusters. Each unclustered point also stores its `nearest_cluster`.
 - **Labels describe the cluster's core.** The LLM sees only the most central abstracts, so a mixed cluster can get a narrow label (e.g. "HER2-Targeted Prostate Cancer Therapies" also contains HER2 breast cancer papers).
 
+## Backend API
+
+```bash
+cd backend
+uv run uvicorn app.main:app --reload --port 8000   # docs at http://localhost:8000/docs
+```
+
+| Endpoint | Description |
+|---|---|
+| `POST /api/chat` | Body `{message, history, strategy, k, model?, think?}`. Retrieves sources, then streams the answer over Server-Sent Events: `sources` (first), `token` (text pieces), `done` (sources, model, token counts, time) or `error`. |
+| `GET /api/search?q=&strategy=&k=` | Retrieval only (`dense`, `bm25` or `hybrid`), no LLM. |
+| `GET /api/passages/{pmid}` | Full abstract, PubMed link and its topic (or nearest topic if unclustered). |
+| `GET /api/questions?query=&page=&page_size=&usable_only=` | Browse and search the BioASQ questions. |
+| `GET /api/questions/{qid}` | Gold answer, gold PMIDs, stored retrieval metrics and answer-evaluation record. |
+| `GET /api/questions/{qid}/run?strategy=&k=` | Run one question: sources marked as in/out of the gold set, generated answer, gold answer. |
+| `GET /api/topics/map`, `GET /api/topics/clusters` | Topic map points and cluster labels. |
+| `GET /api/eval/results` | Retrieval and answer summaries, per-question answer records, worst retrieval questions. |
+| `GET /api/health` | Ollama reachable, models installed, index and result files present (`ok` / `degraded` / `down`). |
+
+Missing pipeline outputs return `503` naming the script to run. CORS allows the Vite dev server (`localhost:5173`); large responses are gzipped (topic map 2.4 MB → 390 KB).
+
+Measured: search ~0.4 s warm; chat first token ~4 s warm (~16 s when the chat model must load first), ~7 s for a short answer. Chat retrieves sources for the latest message only; earlier turns are sent as plain text (last 6 messages).
+
 ## Project layout
 
 ```

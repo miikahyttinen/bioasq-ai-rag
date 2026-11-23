@@ -61,6 +61,26 @@ def rag_messages(question: str, sources: Sequence[Source], hint: str = "") -> li
     ]
 
 
+# Earlier turns are sent as plain text (without their old sources) to fit num_ctx.
+CHAT_HISTORY_MESSAGES = 6
+CHAT_HISTORY_CHARS = 1500
+
+
+def chat_messages(
+    question: str, sources: Sequence[Source], history: Sequence[dict] = ()
+) -> list[dict]:
+    """RAG messages for multi-turn chat: system rules, recent history, then the new turn."""
+    recent = [
+        {"role": m["role"], "content": m["content"][:CHAT_HISTORY_CHARS]}
+        for m in list(history)[-CHAT_HISTORY_MESSAGES:]
+    ]
+    return [
+        {"role": "system", "content": RAG_SYSTEM},
+        *recent,
+        {"role": "user", "content": rag_user_message(question, sources)},
+    ]
+
+
 def no_rag_messages(question: str, hint: str = "") -> list[dict]:
     content = f"Question: {question}" + (f"\n\n{hint}" if hint else "")
     return [

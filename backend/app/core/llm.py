@@ -1,7 +1,7 @@
 """Ollama chat wrapper."""
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -43,6 +43,40 @@ def chat(
         output_tokens=response.eval_count or 0,
         seconds=time.perf_counter() - start,
     )
+
+
+@dataclass
+class StreamStats:
+    prompt_tokens: int = 0
+    output_tokens: int = 0
+    seconds: float = 0.0
+
+
+def stream_chat(
+    messages: list[dict[str, str]],
+    *,
+    model: str | None = None,
+    temperature: float = 0.2,
+    think: bool | None = None,
+    stats: StreamStats | None = None,
+) -> Iterator[str]:
+    """Yield answer text pieces as they are generated; fills `stats` when done."""
+    start = time.perf_counter()
+    stream = get_client().chat(
+        model=model or settings.chat_model,
+        messages=messages,
+        think=settings.chat_think if think is None else think,
+        options={"num_ctx": settings.num_ctx, "temperature": temperature},
+        stream=True,
+    )
+    for part in stream:
+        if part.message.content:
+            yield part.message.content
+        if part.done and stats is not None:
+            stats.prompt_tokens = part.prompt_eval_count or 0
+            stats.output_tokens = part.eval_count or 0
+    if stats is not None:
+        stats.seconds = time.perf_counter() - start
 
 
 def chat_json[M: BaseModel](
